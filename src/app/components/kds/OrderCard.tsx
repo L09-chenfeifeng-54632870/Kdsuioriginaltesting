@@ -44,9 +44,11 @@ export function OrderCard({
   const t = getTranslation(language);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [localDismissedItems, setLocalDismissedItems] = React.useState<Set<string>>(new Set());
+  const [expediterCheckedIds, setExpediterCheckedIds] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     setLocalDismissedItems(new Set());
+    setExpediterCheckedIds(new Set());
   }, [order.id, isExpediterMode]);
 
   const [dimensions, setDimensions] = React.useState({
@@ -526,6 +528,10 @@ export function OrderCard({
                   const { item, totalQuantity, ids } = group;
                   // Determine Selection State for styling
                   const isSelected = selectedItemIds ? ids.every(id => selectedItemIds.has(id)) : false;
+                  
+                  // Check if item is locally checked (Expediter) or globally completed (Kitchen)
+                  const isLocalChecked = isExpediterMode && ids.every(id => expediterCheckedIds.has(id) || item.completed);
+                  const isChecked = isExpediterMode ? isLocalChecked : item.completed;
 
                   return (
                   <div 
@@ -533,11 +539,22 @@ export function OrderCard({
                     className={cn(
                         "flex flex-col shadow-sm break-inside-avoid relative transition-all overflow-hidden border-2",
                         isSelected ? "bg-blue-50 border-blue-300" : "bg-white border-slate-200", 
-                        !isSelected && (!isExpediterMode && item.completed) ? "bg-slate-50 opacity-70 border-slate-300" : ""
+                        !isSelected && isChecked ? "bg-slate-50 opacity-70 border-slate-300" : ""
                     )}
                     onClick={() => {
-                        // Allow item toggle in Expediter Mode too
-                        if (onItemToggle) {
+                        if (isExpediterMode) {
+                            // Local toggle for Expediter Mode (does not affect Kitchen status)
+                            const newSet = new Set(expediterCheckedIds);
+                            ids.forEach(id => {
+                                // If already checked (or completed), toggle off? 
+                                // Actually, if completed globally, we probably shouldn't toggle it off locally?
+                                // Assuming we just toggle the local ID presence.
+                                if (newSet.has(id)) newSet.delete(id);
+                                else newSet.add(id);
+                            });
+                            setExpediterCheckedIds(newSet);
+                        } else if (onItemToggle) {
+                            // Global toggle for Kitchen Mode
                             ids.forEach(id => onItemToggle(order.id, id));
                         }
                     }}
@@ -546,23 +563,11 @@ export function OrderCard({
                     {isExpediterMode && (
                         <div 
                             className={cn(
-                                "w-full px-2 py-0.5 text-[11px] font-black tracking-[0.15em] uppercase flex items-center justify-end border-b select-none cursor-default",
+                                "w-full px-2 py-0.5 text-[11px] font-black tracking-[0.15em] uppercase flex items-center justify-end border-b select-none pointer-events-none",
                                 item.completed 
                                     ? "bg-emerald-100 text-emerald-700 border-emerald-200" 
                                     : "bg-orange-100 text-orange-700 border-orange-200"
                             )}
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                            }}
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                            }}
-                            onTouchStart={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                            }}
                         >
                             {item.completed ? t.done : t.cooking}
                         </div>
@@ -573,7 +578,7 @@ export function OrderCard({
                             <span className={cn(
                               "font-black text-right shrink-0 leading-none mr-1.5 min-w-[2.2rem] mt-0.5",
                               "text-[30px]",
-                              (!isExpediterMode && item.completed) ? "text-slate-400" : "text-black"
+                              isChecked ? "text-slate-400" : "text-black"
                             )}>
                               {totalQuantity}x
                             </span>
@@ -605,7 +610,7 @@ export function OrderCard({
                                             className={cn(
                                                 "font-bold leading-[1.1] w-full tracking-[0.05px]",
                                                 "[overflow-wrap:anywhere] hyphens-auto",
-                                                (!isExpediterMode && item.completed) ? "line-through text-slate-400" : "text-black"
+                                                isChecked ? "line-through text-slate-400" : "text-black"
                                             )}
                                             style={{ fontSize: `${enFontSize}px` }}
                                         >
@@ -619,7 +624,7 @@ export function OrderCard({
                                                 "font-bold leading-tight w-full tracking-[-0.4px]",
                                                 "[overflow-wrap:anywhere] hyphens-auto",
                                                 language === 'zh' ? "mt-0" : "mt-0.5",
-                                                (!isExpediterMode && item.completed) ? "text-slate-400" : "text-[#0f172b]"
+                                                isChecked ? "text-slate-400" : "text-[#0f172b]"
                                             )}
                                             style={{ fontSize: `${zhFontSize}px` }}
                                         >
@@ -677,19 +682,17 @@ export function OrderCard({
                             </div>
                         </div>
                         
-                        {/* Checkbox (Kitchen Mode) - Right Side */}
-                        {!isExpediterMode && (
-                             <div className="flex items-start pt-1 pl-1">
-                                 <div className={cn(
-                                     "w-7 h-7 border-2 flex items-center justify-center transition-all shadow-sm",
-                                     item.completed 
-                                         ? "bg-green-500 border-green-600" 
-                                         : "bg-white border-slate-300"
-                                 )}>
-                                     {item.completed && <Check className="w-5 h-5 text-white stroke-[3]" />}
-                                 </div>
+                        {/* Checkbox - Right Side */}
+                        <div className="flex items-start pt-1 pl-1">
+                             <div className={cn(
+                                 "w-7 h-7 border-2 flex items-center justify-center transition-all shadow-sm",
+                                 isChecked 
+                                     ? "bg-green-500 border-green-600" 
+                                     : "bg-white border-slate-300"
+                             )}>
+                                 {isChecked && <Check className="w-5 h-5 text-white stroke-[3]" />}
                              </div>
-                        )}
+                        </div>
                     </div>
                   </div>
                   );
